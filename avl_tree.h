@@ -19,24 +19,24 @@ public:
     using balance_type = int8_t;
     using key_type = Key;
     using val_type = T;
+    using node_val_type = std::pair<key_type, val_type>;
     using cmp_type = Cmp;
 
 private:
     struct Node final {
-        key_type _key;
-        val_type _value;
+        node_val_type _value;
         balance_type _balance_factor{0};
 
         Node *_parent{nullptr};
         std::unique_ptr<Node> _left{nullptr};
         std::unique_ptr<Node> _right{nullptr};
 
-        explicit Node(key_type key, val_type value, Node *parent) : _key(key), _value(value), _parent(parent) {}
+        explicit Node(const node_val_type &value, Node *parent) : _value(value), _parent(parent) {}
         Node(const Node &) = default;
         Node(Node &&) = default;
         Node &operator=(const Node &) = default;
         Node &operator=(Node &&) = default;
-        ~Node() { std::cout << "delete key: " << _key << std::endl; }
+        ~Node() { std::cout << "delete key: " << _value.first << std::endl; }
     };
 
     using node_type = Node;
@@ -45,32 +45,32 @@ private:
     const cmp_type _comparator{};
     std::unique_ptr<node_type> _root{nullptr};
 
-    node_type *insert_internal(node_type *insert, const key_type &key, const val_type &value) {
+    node_type *insert_internal(node_type *insert, const node_val_type &value) {
         assert(insert && "Inserting at nullptr.");
 
-        if (_comparator(key, insert->_key)) {
+        if (_comparator(value.first, insert->_value.first)) {
             if (insert->_left == nullptr) {
-                insert->_left = std::make_unique<node_type>(key, value, insert);
+                insert->_left = std::make_unique<node_type>(value, insert);
                 ++_size;
                 return insert->_left.get();
             } else
-                return insert_internal(insert->_left.get(), key, value);
+                return insert_internal(insert->_left.get(), value);
         } else {
             if (insert->_right == nullptr) {
-                insert->_right = std::make_unique<node_type>(key, value, insert);
+                insert->_right = std::make_unique<node_type>(value, insert);
                 ++_size;
                 return insert->_right.get();
             } else {
-                return insert_internal(insert->_right.get(), key, value);
+                return insert_internal(insert->_right.get(), value);
             }
         }
     }
 
     std::unique_ptr<node_type> &get_unique_ptr(node_type *node) noexcept {
         auto *parent = node->_parent;
-        if (parent != nullptr) {
+        if (parent)
             return node == parent->_left.get() ? parent->_left : parent->_right;
-        } else
+        else
             return _root;
     }
 
@@ -143,9 +143,9 @@ public:
     constexpr size_type max_size() const noexcept { return std::numeric_limits<size_type>::max(); }
 
     void clear() noexcept { _root.reset(); _size = 0; }
-    [[maybe_unused]] std::pair<node_type *, bool> insert(const key_type &key, const val_type &value) {
+    [[maybe_unused]] std::pair<node_type *, bool> insert(const node_val_type &value) {
         if (!_root) {
-            _root = std::make_unique<node_type>(key, value, nullptr);
+            _root = std::make_unique<node_type>(value, nullptr);
             ++_size;
             return std::pair(_root.get(), true);
         }
@@ -153,26 +153,22 @@ public:
         if (_size == max_size())
             return std::pair(nullptr, false);
 
-        auto *new_node = insert_internal(_root.get(), key, value);
+        auto *new_node = insert_internal(_root.get(), value);
         retrace(get_unique_ptr(new_node));
 
         return std::pair(new_node, true);
     }
-    [[maybe_unused]] std::pair<node_type *, bool> insert(const val_type &value) { return insert(value, value); }
-
-    bool operator==(const avl_tree<Key, T, Cmp> &lhs, const avl_tree<Key, T, Cmp> &rhs) const noexcept {
-
-    }
+    [[maybe_unused]] std::pair<node_type *, bool> insert(const val_type &value) { return insert(std::make_pair(value, value)); }
 
     void dump(const node_type *node) {
         if (!node)
             return;
 
         dump(node->_left.get());
-        std::cout << node->_key << " " << (int32_t)node->_balance_factor << std::endl;
+        std::cout << node->_value.first << " " << (int32_t)node->_balance_factor << std::endl;
         dump(node->_right.get());
     }
-    void dump() { std::cout << "root: " << _root->_key << std::endl; dump(_root.get()); }
+    void dump() { std::cout << "root: " << _root->_value.first << std::endl; dump(_root.get()); }
 };
 
 } // end namespace avl
