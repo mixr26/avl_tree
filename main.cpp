@@ -14,7 +14,9 @@ int main()
     tree.insert(1);
     tree.dump();
 
-    for (auto it = tree.begin(); it != tree.end(); ++it) {
+    auto it = tree.end();
+    --it;
+    for (; it != tree.begin(); --it) {
         std::cout << it->first << std::endl;
     }
     return 0;

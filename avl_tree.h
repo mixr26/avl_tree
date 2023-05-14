@@ -141,7 +141,7 @@ private:
 public:
     template <typename ItT>
     struct Iterator {
-        using iterator_category = std::forward_iterator_tag;
+        using iterator_category = std::bidirectional_iterator_tag;
         using difference_type = std::ptrdiff_t;
         using value_type = std::remove_cv_t<ItT>;
         using pointer = ItT *;
@@ -156,6 +156,13 @@ public:
         Iterator<ItT> operator++(int) {
             Iterator<ItT> tmp = *this;
             next();
+            return tmp;
+        }
+
+        Iterator<ItT> &operator--() { prev(); return *this; }
+        Iterator<ItT> operator--(int) {
+            Iterator<ItT> tmp = *this;
+            prev();
             return tmp;
         }
 
@@ -181,9 +188,18 @@ public:
             if (_ptr->_right)
                 _ptr = smallest_subtree_elt(_ptr->_right.get());
             else {
-                while (_ptr != _ptr->_parent->_left.get()) {
+                while (_ptr != _ptr->_parent->_left.get())
                     _ptr = _ptr->_parent;
-                }
+                _ptr = _ptr->_parent;
+            }
+        }
+
+        void prev() noexcept {
+            if (_ptr->_left)
+                _ptr = largest_subtree_elt(_ptr->_left.get());
+            else {
+                while (_ptr != _ptr->_parent->_right.get())
+                    _ptr = _ptr->_parent;
                 _ptr = _ptr->_parent;
             }
         }
@@ -204,12 +220,12 @@ public:
     constexpr size_type max_size() const noexcept { return std::numeric_limits<size_type>::max(); }
 
     void clear() noexcept { _root_sentinel->_left.reset(nullptr); _size = 0; }
-    [[maybe_unused]] std::pair<node_type *, bool> insert(const node_val_type &value) {
+    [[maybe_unused]] std::pair<iterator, bool> insert(const node_val_type &value) {
         if (!root()) {
             _root_sentinel->_left = std::make_unique<node_type>(value, _root_sentinel.get());
             _begin = root();
             ++_size;
-            return std::pair(root(), true);
+            return std::pair(iterator(root()), true);
         }
 
         if (_size == max_size())
@@ -218,9 +234,9 @@ public:
         auto *new_node = insert_internal(root(), value);
         retrace(get_unique_ptr(new_node));
 
-        return std::pair(new_node, true);
+        return std::pair(iterator(new_node), true);
     }
-    [[maybe_unused]] std::pair<node_type *, bool> insert(const val_type &value) { return insert(std::make_pair(value, value)); }
+    [[maybe_unused]] std::pair<iterator, bool> insert(const val_type &value) { return insert(std::make_pair(value, value)); }
 
     void dump(const node_type *node) {
         if (!node)
