@@ -18,7 +18,7 @@ public:
     using balance_type = int8_t;
     using key_type = Key;
     using val_type = T;
-    using node_val_type = std::pair<key_type, val_type>;
+    using node_val_type = std::pair<const key_type, val_type>;
     using cmp_type = Cmp;
 
 private:
@@ -103,6 +103,62 @@ private:
         new_root->_right->_balance_factor = 0;
     }
 
+    void rotate_subtree_right_left(std::unique_ptr<node_type> &old_root) noexcept {
+        auto *old_root_parent = old_root->_parent;
+        auto *child = old_root->_right.get();
+        auto *new_root = old_root->_right->_left.get();
+        std::swap(new_root->_right, child->_left);
+        std::swap(old_root->_right, new_root->_right);
+        new_root->_parent = old_root.get();
+        new_root->_right->_parent = new_root;
+        if (new_root->_right->_left)
+            new_root->_right->_left->_parent = new_root->_right.get();
+
+        std::swap(new_root->_left, old_root->_right);
+        std::swap(old_root, new_root->_left);
+        new_root->_parent = old_root_parent;
+        new_root->_left->_parent = new_root;
+        if (new_root->_left->_right)
+            new_root->_left->_right->_parent = new_root->_left.get();
+
+        if (new_root->_balance_factor > 0) {
+            new_root->_left->_balance_factor = -1;
+            new_root->_right->_balance_factor = 0;
+        } else {
+            new_root->_left->_balance_factor = 0;
+            new_root->_right->_balance_factor = 1;
+        }
+        new_root->_balance_factor = 0;
+    }
+
+    void rotate_subtree_left_right(std::unique_ptr<node_type> &old_root) noexcept {
+        auto *old_root_parent = old_root->_parent;
+        auto *child = old_root->_left.get();
+        auto *new_root = old_root->_left->_right.get();
+        std::swap(new_root->_left, child->_right);
+        std::swap(old_root->_left, new_root->_left);
+        new_root->_parent = old_root.get();
+        new_root->_left->_parent = new_root;
+        if (new_root->_left->_right)
+            new_root->_left->_right->_parent = new_root->_left.get();
+
+        std::swap(new_root->_right, old_root->_left);
+        std::swap(old_root, new_root->_right);
+        new_root->_parent = old_root_parent;
+        new_root->_right->_parent = new_root;
+        if (new_root->_right->_left)
+            new_root->_right->_left->_parent = new_root->_right.get();
+
+        if (new_root->_balance_factor < 0) {
+            new_root->_right->_balance_factor = 1;
+            new_root->_left->_balance_factor = 0;
+        } else {
+            new_root->_right->_balance_factor = 0;
+            new_root->_left->_balance_factor = -1;
+        }
+        new_root->_balance_factor = 0;
+    }
+
     void retrace(std::unique_ptr<node_type> &node) {
         auto *parent = node->_parent;
         if (parent == _root_sentinel.get())
@@ -114,10 +170,10 @@ private:
             if (parent->_balance_factor > 0) {
                 if (node->_balance_factor >= 0)
                     rotate_subtree_left(get_unique_ptr(parent));
-                return;
+                else
+                    rotate_subtree_right_left(get_unique_ptr(parent));
             } else if (parent->_balance_factor < 0) {
                 parent->_balance_factor = 0;
-                return;
             } else {
                 ++parent->_balance_factor;
                 return retrace(get_unique_ptr(parent));
@@ -127,10 +183,10 @@ private:
             if (parent->_balance_factor < 0) {
                 if (node->_balance_factor <= 0)
                     rotate_subtree_right(get_unique_ptr(parent));
-                return;
+                else
+                    rotate_subtree_left_right(get_unique_ptr(parent));
             } else if (parent->_balance_factor > 0) {
                 parent->_balance_factor = 0;
-                return;
             } else {
                 --parent->_balance_factor;
                 return retrace(get_unique_ptr(parent));
