@@ -36,6 +36,9 @@ private:
         Node(Node &&) = default;
         Node &operator=(const Node &) = default;
         Node &operator=(Node &&) = default;
+
+        friend bool operator==(const Node &lhs, const Node &rhs) noexcept { return lhs._value == rhs._value; }
+        friend bool operator!=(const Node &lhs, const Node &rhs) noexcept { return lhs._value != rhs._value; }
     };
 
     using node_type = Node;
@@ -69,6 +72,17 @@ private:
                 return insert_internal(insert->_right.get(), value);
             }
         }
+    }
+
+    node_type *find_internal(node_type *root, const Key& key) const noexcept {
+        if (!root)
+            return _root_sentinel.get();
+        else if (!_comparator(root->_value.first, key) && !_comparator(key, root->_value.first))
+            return root;
+        else if (_comparator(key, root->_value.first))
+            return find_internal(root->_left.get(), key);
+        else
+            return find_internal(root->_right.get(), key);
     }
 
     std::unique_ptr<node_type> &get_unique_ptr(node_type *node) noexcept {
@@ -222,8 +236,8 @@ public:
             return tmp;
         }
 
-        friend bool operator==(const Iterator<ItT> &lhs, const Iterator<ItT> &rhs) { return lhs._ptr == rhs._ptr; }
-        friend bool operator!=(const Iterator<ItT> &lhs, const Iterator<ItT> &rhs) { return !(lhs == rhs); }
+        friend bool operator==(const Iterator<ItT> &lhs, const Iterator<ItT> &rhs) noexcept { return lhs._ptr == rhs._ptr; }
+        friend bool operator!=(const Iterator<ItT> &lhs, const Iterator<ItT> &rhs) noexcept { return lhs._ptr != rhs._ptr; }
 
     private:
         node_type *_ptr;
@@ -293,6 +307,38 @@ public:
         return std::pair(iterator(new_node), true);
     }
     [[maybe_unused]] std::pair<iterator, bool> insert(const val_type &value) { return insert(std::make_pair(value, value)); }
+
+    iterator find(const Key &key) { return iterator(find_internal(root(), key)); }
+    const_iterator find(const Key &key) const {return const_iterator(find_internal(root(), key));}
+
+    bool friend operator==(const avl_tree<T, Key, Cmp> &lhs, const avl_tree<T, Key, Cmp> &rhs) noexcept {
+        if (lhs.size() != rhs.size())
+            return false;
+
+        for (auto it_lhs = lhs.cbegin(), it_rhs = rhs.cbegin(); it_lhs != lhs.cend(); ++it_lhs, ++it_rhs) {
+            if (*it_lhs != *it_rhs)
+                return false;
+        }
+
+        return true;
+    }
+    bool friend operator!=(const avl_tree<T, Key, Cmp> &lhs, const avl_tree<T, Key, Cmp> &rhs) noexcept { return !(lhs == rhs); }
+    bool friend operator<(const avl_tree<T, Key, Cmp> &lhs, const avl_tree<T, Key, Cmp> &rhs) noexcept {
+        auto it_lhs = lhs.cbegin();
+        auto it_rhs = rhs.cbegin();
+        for (; it_lhs != lhs.cend() || it_rhs != rhs.cend(); ++it_lhs, ++it_rhs) {
+            if (*it_lhs != *it_rhs)
+                return *it_lhs < *it_rhs;
+        }
+
+        if (it_lhs == lhs.cend() && it_rhs != rhs.cend())
+            return true;
+
+        return false;
+    }
+    bool friend operator<=(const avl_tree<T, Key, Cmp> &lhs, const avl_tree<T, Key, Cmp> &rhs) noexcept { return (lhs < rhs) || (lhs == rhs); }
+    bool friend operator>(const avl_tree<T, Key, Cmp> &lhs, const avl_tree<T, Key, Cmp> &rhs) noexcept { return !(lhs <= rhs); }
+    bool friend operator>=(const avl_tree<T, Key, Cmp> &lhs, const avl_tree<T, Key, Cmp> &rhs) noexcept { return !(lhs < rhs); }
 
     void dump(const node_type *node) {
         if (!node)
