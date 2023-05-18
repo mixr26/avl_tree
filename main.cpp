@@ -13,6 +13,7 @@ int main()
 
     std::pair<int, int> x = {10, 11};
     tree.emplace(std::move(x));
+    tree.try_emplace(0, 2);
 
     tree.dump();
 

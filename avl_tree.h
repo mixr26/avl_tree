@@ -89,9 +89,8 @@ private:
     }
 
     val_type &at_internal(const key_type &key) {
-        if (auto *node = find_internal(root(), key); node != _root_sentinel.get()) {
+        if (auto *node = find_internal(root(), key); node != _root_sentinel.get())
             return node->_value.second;
-        }
 
         throw std::out_of_range();
     }
@@ -308,16 +307,41 @@ public:
             _root_sentinel->_left = std::make_unique<node_type>(node_val_type(std::forward<Args>(args)...), _root_sentinel.get());
             _begin = root();
             ++_size;
-            return std::pair(iterator(root()), true);
+            return std::make_pair(iterator(root()), true);
         }
 
         if (_size == max_size())
-            return std::pair(end(), false);
+            return std::make_pair(end(), false);
 
         auto *new_node = insert_internal(root(), std::forward<Args>(args)...);
         retrace(get_unique_ptr(new_node));
 
-        return std::pair(iterator(new_node), true);
+        return std::make_pair(iterator(new_node), true);
+    }
+
+    template<class... Args>
+    [[maybe_unused]] std::pair<iterator, bool> try_emplace(const key_type &key, Args&&... args) {
+        if (auto it = find(key); it != end())
+            return std::make_pair(it, true);
+
+        if (!root()) {
+            _root_sentinel->_left = std::make_unique<node_type>(node_val_type(std::piecewise_construct, std::forward_as_tuple(key),
+                                                                              std::forward_as_tuple(std::forward<Args>(args)...)),
+                                                                _root_sentinel.get());
+            _begin = root();
+            ++_size;
+            return std::make_pair(iterator(root()), true);
+        }
+
+        if (_size == max_size())
+            return std::make_pair(end(), false);
+
+        auto new_node_val = node_val_type(std::piecewise_construct, std::forward_as_tuple(key),
+                                          std::forward_as_tuple(std::forward<Args>(args)...));
+        auto *new_node = insert_internal(root(), std::move(new_node_val));
+        retrace(get_unique_ptr(new_node));
+
+        return std::make_pair(iterator(new_node), true);
     }
 
     [[maybe_unused]] std::pair<iterator, bool> insert(const node_val_type &value) { return emplace(value); }
