@@ -51,27 +51,28 @@ private:
     node_type *root() noexcept { return _root_sentinel->_left.get(); }
     const node_type *root() const noexcept { return _root_sentinel->_left.get(); }
 
-    node_type *insert_internal(node_type *insert, const node_val_type &value) {
+    template<class ValT>
+    node_type *insert_internal(node_type *insert, ValT &&value) {
         assert(insert && "Inserting at nullptr.");
 
         if (!_comparator(value.first, insert->_value.first) && !_comparator(insert->_value.first, value.first))
             return insert;
         else if (_comparator(value.first, insert->_value.first)) {
             if (insert->_left == nullptr) {
-                insert->_left = std::make_unique<node_type>(value, insert);
+                insert->_left = std::make_unique<node_type>(std::forward<ValT>(value), insert);
                 if (insert == _begin)
                     _begin = insert->_left.get();
                 ++_size;
                 return insert->_left.get();
             } else
-                return insert_internal(insert->_left.get(), value);
+                return insert_internal(insert->_left.get(), std::forward<ValT>(value));
         } else {
             if (insert->_right == nullptr) {
-                insert->_right = std::make_unique<node_type>(value, insert);
+                insert->_right = std::make_unique<node_type>(std::forward<ValT>(value), insert);
                 ++_size;
                 return insert->_right.get();
             } else {
-                return insert_internal(insert->_right.get(), value);
+                return insert_internal(insert->_right.get(), std::forward<ValT>(value));
             }
         }
     }
@@ -301,9 +302,10 @@ public:
 
     void clear() noexcept { _root_sentinel->_left.reset(nullptr); _size = 0; }
 
-    [[maybe_unused]] std::pair<iterator, bool> insert(const node_val_type &value) {
+    template<class... Args>
+    [[maybe_unused]] std::pair<iterator, bool> emplace(Args&&... args) {
         if (!root()) {
-            _root_sentinel->_left = std::make_unique<node_type>(value, _root_sentinel.get());
+            _root_sentinel->_left = std::make_unique<node_type>(node_val_type(std::forward<Args>(args)...), _root_sentinel.get());
             _begin = root();
             ++_size;
             return std::pair(iterator(root()), true);
@@ -312,12 +314,15 @@ public:
         if (_size == max_size())
             return std::pair(end(), false);
 
-        auto *new_node = insert_internal(root(), value);
+        auto *new_node = insert_internal(root(), std::forward<Args>(args)...);
         retrace(get_unique_ptr(new_node));
 
         return std::pair(iterator(new_node), true);
     }
-    [[maybe_unused]] std::pair<iterator, bool> insert(const val_type &value) { return insert(std::make_pair(value, value)); }
+
+    [[maybe_unused]] std::pair<iterator, bool> insert(const node_val_type &value) { return emplace(value); }
+    [[maybe_unused]] std::pair<iterator, bool> insert(node_val_type &&value) { return emplace(std::move(value)); }
+    [[maybe_unused]] std::pair<iterator, bool> insert(const val_type &value) { return emplace(std::make_pair(value, value)); }
 
     iterator find(const key_type &key) { return iterator(find_internal(root(), key)); }
     const_iterator find(const key_type &key) const {return const_iterator(find_internal(root(), key));}
@@ -358,7 +363,7 @@ public:
             return node->_value.second;
         }
 
-        return insert({key, val_type()}).first->second;
+        return emplace(std::make_pair(key, val_type())).first->second;
     }
 
     void dump(const node_type *node) {

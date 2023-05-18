@@ -10,7 +10,11 @@ int main()
     tree.insert({8, 9});
 
     tree[2] = 5;
-    std::cout << tree[2] << std::endl;
+
+    std::pair<int, int> x = {10, 11};
+    tree.emplace(std::move(x));
+
+    tree.dump();
 
     return 0;
 }
