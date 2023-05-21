@@ -51,7 +51,19 @@ private:
     node_type *root() noexcept { return _root_sentinel->_left.get(); }
     const node_type *root() const noexcept { return _root_sentinel->_left.get(); }
 
-    template<class ValT>
+    static node_type *smallest_subtree_elt(node_type *root) noexcept {
+        if (root->_left == nullptr)
+            return root;
+        return smallest_subtree_elt(root->_left.get());
+    }
+
+    static node_type *largest_subtree_elt(node_type *root) noexcept {
+        if (root->_right == nullptr)
+            return root;
+        return largest_subtree_elt(root->_right.get());
+    }
+
+    template <class ValT>
     node_type *insert_internal(node_type *insert, ValT &&value) {
         assert(insert && "Inserting at nullptr.");
 
@@ -77,6 +89,58 @@ private:
         }
     }
 
+    void erase_internal(node_type *pos) noexcept {
+        auto single_child = [pos, this]() -> std::unique_ptr<node_type>& {
+            if (pos->_left && !pos->_right)
+                return pos->_left;
+            else if (pos->_right && !pos->_left)
+                return pos->_right;
+            else
+                return _root_sentinel;
+        };
+
+        // Leaf node.
+        if (!pos->_left && !pos->_right) {
+            auto *parent = pos->_parent;
+            if (pos == parent->_left.get()) {
+                parent->_left.reset(nullptr);
+                if (pos == _begin)
+                    _begin = parent;
+            } else
+                parent->_right.reset(nullptr);
+        // Node has a single child.
+        } else if (auto &child = single_child(); child.get() != _root_sentinel.get()) {
+            auto *pos_parent = pos->_parent;
+            if (pos == pos->_parent->_left.get()) {
+                std::swap(pos_parent->_left, child);
+                pos_parent->_left->_parent = pos_parent;
+                if (pos == _begin)
+                    _begin = pos_parent->_left.get();
+                child.reset(nullptr);
+            } else {
+                std::swap(pos_parent->_right, child);
+                pos_parent->_right->_parent = pos_parent;
+                child.reset(nullptr);
+            }
+        // Node has two children.
+        } else {
+            auto *swap_node = smallest_subtree_elt(pos->_right.get());
+            auto *swap_node_parent = swap_node->_parent;
+            auto *pos_parent = pos->_parent;
+            std::swap(get_unique_ptr(pos), get_unique_ptr(swap_node));
+            std::swap(swap_node->_left, pos->_left);
+            std::swap(swap_node->_right, pos->_right);
+
+            swap_node->_parent = pos_parent;
+            pos->_parent = swap_node_parent;
+            if (pos->_right)
+                pos->_right->_parent = pos;
+            swap_node->_left->_parent = swap_node;
+            swap_node->_right->_parent = swap_node;
+            return erase_internal(pos);
+        }
+    }
+
     node_type *find_internal(node_type *root, const key_type& key) const noexcept {
         if (!root)
             return _root_sentinel.get();
@@ -92,7 +156,7 @@ private:
         if (auto *node = find_internal(root(), key); node != _root_sentinel.get())
             return node->_value.second;
 
-        throw std::out_of_range();
+        throw std::out_of_range("Nonexistent key.\n");
     }
 
     std::unique_ptr<node_type> &get_unique_ptr(node_type *node) noexcept {
@@ -110,8 +174,13 @@ private:
         new_root->_left->_parent = new_root;
         if (new_root->_left->_right)
             new_root->_left->_right->_parent = new_root->_left.get();
-        new_root->_balance_factor = 0;
-        new_root->_left->_balance_factor = 0;
+        if (new_root->_balance_factor == 0) {
+            new_root->_balance_factor = -1;
+            new_root->_left->_balance_factor = 1;
+        } else {
+            new_root->_balance_factor = 0;
+            new_root->_left->_balance_factor = 0;
+        }
     }
 
     void rotate_subtree_right(std::unique_ptr<node_type> &old_root) noexcept {
@@ -123,8 +192,13 @@ private:
         new_root->_right->_parent = new_root;
         if (new_root->_right->_left)
             new_root->_right->_left->_parent = new_root->_right.get();
-        new_root->_balance_factor = 0;
-        new_root->_right->_balance_factor = 0;
+        if (new_root->_balance_factor == 0) {
+            new_root->_balance_factor = 1;
+            new_root->_right->_balance_factor = -1;
+        } else {
+            new_root->_balance_factor = 0;
+            new_root->_right->_balance_factor = 0;
+        }
     }
 
     void rotate_subtree_right_left(std::unique_ptr<node_type> &old_root) noexcept {
@@ -145,10 +219,14 @@ private:
         if (new_root->_left->_right)
             new_root->_left->_right->_parent = new_root->_left.get();
 
-        if (new_root->_balance_factor > 0) {
+        if (new_root->_balance_factor == 0) {
+            new_root->_left->_balance_factor = 0;
+            new_root->_right->_balance_factor = 0;
+        } else if (new_root->_balance_factor > 0) {
             new_root->_left->_balance_factor = -1;
             new_root->_right->_balance_factor = 0;
         } else {
+            assert(new_root->_balance_factor == -1);
             new_root->_left->_balance_factor = 0;
             new_root->_right->_balance_factor = 1;
         }
@@ -173,22 +251,26 @@ private:
         if (new_root->_right->_left)
             new_root->_right->_left->_parent = new_root->_right.get();
 
-        if (new_root->_balance_factor < 0) {
+        if (new_root->_balance_factor == 0) {
+            new_root->_left->_balance_factor = 0;
+            new_root->_right->_balance_factor = 0;
+        } else if (new_root->_balance_factor < 0) {
             new_root->_right->_balance_factor = 1;
             new_root->_left->_balance_factor = 0;
         } else {
+            assert(new_root->_balance_factor == 1);
             new_root->_right->_balance_factor = 0;
             new_root->_left->_balance_factor = -1;
         }
         new_root->_balance_factor = 0;
     }
 
-    void retrace(std::unique_ptr<node_type> &node) {
+    void retrace_insert(std::unique_ptr<node_type> &node) {
         auto *parent = node->_parent;
         if (parent == _root_sentinel.get())
             return;
 
-        const auto *left_child = parent->_left.get();
+        [[maybe_unused]] const auto *left_child = parent->_left.get();
         const auto *right_child = parent->_right.get();
         if (node.get() == right_child) {
             if (parent->_balance_factor > 0) {
@@ -200,7 +282,7 @@ private:
                 parent->_balance_factor = 0;
             } else {
                 ++parent->_balance_factor;
-                return retrace(get_unique_ptr(parent));
+                return retrace_insert(get_unique_ptr(parent));
             }
         } else {
             assert(node.get() == left_child);
@@ -213,7 +295,42 @@ private:
                 parent->_balance_factor = 0;
             } else {
                 --parent->_balance_factor;
-                return retrace(get_unique_ptr(parent));
+                return retrace_insert(get_unique_ptr(parent));
+            }
+        }
+    }
+
+    void retrace_erase(std::unique_ptr<node_type> &node) {
+        auto *parent = node->_parent;
+        if (parent == _root_sentinel.get())
+            return;
+
+        const auto *left_child = parent->_left.get();
+        [[maybe_unused]] const auto *right_child = parent->_right.get();
+        if (node.get() == left_child) {
+            if (parent->_balance_factor > 0) {
+                if (right_child->_balance_factor < 0)
+                    rotate_subtree_right_left(get_unique_ptr(parent));
+                else
+                    rotate_subtree_left(get_unique_ptr(parent));
+            } else if (parent->_balance_factor == 0) {
+                parent->_balance_factor = 1;
+            } else {
+                parent->_balance_factor = 0;
+                return retrace_erase(get_unique_ptr(parent));
+            }
+        } else {
+            assert(node.get() == right_child);
+            if (parent->_balance_factor < 0) {
+                if (left_child->_balance_factor > 0)
+                    rotate_subtree_left_right(get_unique_ptr(parent));
+                else
+                    rotate_subtree_right(get_unique_ptr(parent));
+            } else if (parent->_balance_factor == 0) {
+                parent->_balance_factor = -1;
+            } else {
+                parent->_balance_factor = 0;
+                return retrace_erase(get_unique_ptr(parent));
             }
         }
     }
@@ -221,6 +338,8 @@ private:
 public:
     template <typename ItT>
     struct Iterator final {
+        friend class avl_tree<Key, T, Cmp>;
+
         using iterator_category = std::bidirectional_iterator_tag;
         using difference_type = std::ptrdiff_t;
         using value_type = std::remove_cv_t<ItT>;
@@ -251,18 +370,6 @@ public:
 
     private:
         node_type *_ptr;
-
-        node_type *smallest_subtree_elt(node_type *root) const noexcept {
-            if (root->_left == nullptr)
-                return root;
-            return smallest_subtree_elt(root->_left.get());
-        }
-
-        node_type *largest_subtree_elt(node_type *root) const noexcept {
-            if (root->_right == nullptr)
-                return root;
-            return largest_subtree_elt(root->_right.get());
-        }
 
         void next() noexcept {
             if (_ptr->_right)
@@ -301,7 +408,7 @@ public:
 
     void clear() noexcept { _root_sentinel->_left.reset(nullptr); _size = 0; }
 
-    template<class... Args>
+    template <class... Args>
     [[maybe_unused]] std::pair<iterator, bool> emplace(Args&&... args) {
         if (!root()) {
             _root_sentinel->_left = std::make_unique<node_type>(node_val_type(std::forward<Args>(args)...), _root_sentinel.get());
@@ -314,12 +421,12 @@ public:
             return std::make_pair(end(), false);
 
         auto *new_node = insert_internal(root(), std::forward<Args>(args)...);
-        retrace(get_unique_ptr(new_node));
+        retrace_insert(get_unique_ptr(new_node));
 
         return std::make_pair(iterator(new_node), true);
     }
 
-    template<class... Args>
+    template <class... Args>
     [[maybe_unused]] std::pair<iterator, bool> try_emplace(const key_type &key, Args&&... args) {
         if (auto it = find(key); it != end())
             return std::make_pair(it, true);
@@ -339,7 +446,7 @@ public:
         auto new_node_val = node_val_type(std::piecewise_construct, std::forward_as_tuple(key),
                                           std::forward_as_tuple(std::forward<Args>(args)...));
         auto *new_node = insert_internal(root(), std::move(new_node_val));
-        retrace(get_unique_ptr(new_node));
+        retrace_insert(get_unique_ptr(new_node));
 
         return std::make_pair(iterator(new_node), true);
     }
@@ -347,6 +454,33 @@ public:
     [[maybe_unused]] std::pair<iterator, bool> insert(const node_val_type &value) { return emplace(value); }
     [[maybe_unused]] std::pair<iterator, bool> insert(node_val_type &&value) { return emplace(std::move(value)); }
     [[maybe_unused]] std::pair<iterator, bool> insert(const val_type &value) { return emplace(std::make_pair(value, value)); }
+
+    template <class InsT>
+    [[maybe_unused]] std::pair<iterator, bool> insert(InsT &&value) { return emplace(std::forward<InsT>(value)); }
+
+    template <class ItT>
+    void insert(ItT first, ItT last) {
+        for (; first != last; ++first)
+            insert(*first);
+    }
+
+    void insert(std::initializer_list<node_val_type> ilist) {
+        for (auto val : ilist)
+            insert(val);
+    }
+
+    iterator erase(iterator pos) {
+        if (pos == end())
+            throw std::out_of_range("Invalid iterator.\n");
+        auto ret_it = pos;
+        ++ret_it;
+
+        retrace_erase(get_unique_ptr(pos._ptr));
+        erase_internal(pos._ptr);
+        --_size;
+
+        return ret_it;
+    }
 
     iterator find(const key_type &key) { return iterator(find_internal(root(), key)); }
     const_iterator find(const key_type &key) const {return const_iterator(find_internal(root(), key));}
